@@ -1,4 +1,4 @@
-# Claude Code: A Highly Agentic Coding Assistant - Course Materials & Links
+# Exploring Claude Code: A Highly Agentic Coding Assistant - Course Materials & Links
 
 This repository contains the resources and links of the short course "Claude Code: A highly Agentic Coding Assistant".
 
