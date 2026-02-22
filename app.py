@@ -37,7 +37,13 @@ html, body, [class*="css"] {
 
 /* Hide default metric styling (using custom cards instead) */
 
-/* KPI cards */
+/* KPI cards — fill the full height of the Streamlit column */
+[data-testid="stHorizontalBlock"] [data-testid="stColumn"] [data-testid="stMarkdown"] {
+    height: 100%;
+}
+[data-testid="stHorizontalBlock"] [data-testid="stColumn"] [data-testid="stMarkdown"] > div {
+    height: 100%;
+}
 .kpi-card {
     background: #ffffff;
     border: 1px solid #e2e8f0;
@@ -47,6 +53,8 @@ html, body, [class*="css"] {
     display: flex;
     flex-direction: column;
     justify-content: center;
+    height: 100%;
+    box-sizing: border-box;
 }
 .kpi-card .card-label {
     color: #64748b;
@@ -405,6 +413,17 @@ with chart_bot_left:
         ],
         labels={"revenue": "Revenue", "customer_state": "State"},
     )
+    # Add state abbreviation labels on the map
+    fig_map.add_trace(go.Scattergeo(
+        locations=state_revenue["customer_state"],
+        locationmode="USA-states",
+        text=state_revenue["customer_state"],
+        mode="text",
+        textfont=dict(size=9, color="#1e293b", family="Inter, sans-serif"),
+        showlegend=False,
+        hoverinfo="skip",
+    ))
+
     fig_map.update_layout(
         title="Revenue by State",
         geo=dict(
