@@ -35,71 +35,54 @@ html, body, [class*="css"] {
     padding-bottom: 1rem;
 }
 
-/* KPI cards */
-div[data-testid="stMetric"] {
-    background: #ffffff;
-    border: 1px solid #e2e8f0;
-    border-radius: 12px;
-    padding: 16px 20px;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.06);
-}
-div[data-testid="stMetric"] label {
-    color: #64748b;
-    font-size: 0.82rem;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-}
-div[data-testid="stMetric"] [data-testid="stMetricValue"] {
-    font-size: 1.65rem;
-    font-weight: 700;
-    color: #1e293b;
-}
+/* Hide default metric styling (using custom cards instead) */
 
-/* Bottom cards wrapper */
-.bottom-card {
+/* KPI cards */
+.kpi-card {
     background: #ffffff;
     border: 1px solid #e2e8f0;
     border-radius: 12px;
-    padding: 24px 28px;
+    padding: 18px 20px;
     box-shadow: 0 1px 3px rgba(0,0,0,0.06);
-    height: 170px;
     display: flex;
     flex-direction: column;
     justify-content: center;
 }
-.bottom-card .card-label {
+.kpi-card .card-label {
     color: #64748b;
-    font-size: 0.82rem;
+    font-size: 0.78rem;
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.04em;
     margin-bottom: 4px;
 }
-.bottom-card .card-value {
-    font-size: 2rem;
+.kpi-card .card-value {
+    font-size: 1.6rem;
     font-weight: 700;
     color: #1e293b;
     margin-bottom: 2px;
 }
-.bottom-card .card-delta-positive {
+.kpi-card .card-delta-positive {
     color: #16a34a;
-    font-size: 0.9rem;
+    font-size: 0.85rem;
     font-weight: 600;
 }
-.bottom-card .card-delta-negative {
+.kpi-card .card-delta-negative {
     color: #dc2626;
-    font-size: 0.9rem;
+    font-size: 0.85rem;
     font-weight: 600;
 }
-.bottom-card .card-subtitle {
+.kpi-card .card-subtitle {
     color: #94a3b8;
-    font-size: 0.78rem;
+    font-size: 0.75rem;
     margin-top: 2px;
+}
+.kpi-card .card-spacer {
+    height: 1.2em;
 }
 .stars {
     color: #f59e0b;
-    font-size: 1.3rem;
+    font-size: 1.1rem;
     letter-spacing: 2px;
 }
 </style>
@@ -198,7 +181,7 @@ delivered_previous = dl.filter_by_date_range(
 
 has_comparison = len(delivered_previous) > 0
 
-# ── KPI Row ──────────────────────────────────────────────────────────────────
+# ── Compute all KPI metrics ──────────────────────────────────────────────────
 
 rev_current = bm.total_revenue(delivered_current)
 rev_change = bm.revenue_growth(delivered_current, delivered_previous) if has_comparison else float("nan")
@@ -211,34 +194,98 @@ aov_change = bm.aov_growth(delivered_current, delivered_previous) if has_compari
 orders_current = bm.total_orders(delivered_current)
 orders_change = bm.order_count_growth(delivered_current, delivered_previous) if has_comparison else float("nan")
 
-kpi1, kpi2, kpi3, kpi4 = st.columns(4)
+review_summary = bm.review_delivery_summary(delivered_current, reviews)
+avg_delivery = bm.average_delivery_days(review_summary) if len(review_summary) > 0 else 0.0
+avg_review = bm.average_review_score(review_summary) if len(review_summary) > 0 else 0.0
 
-with kpi1:
-    st.metric(
-        label="Total Revenue",
-        value=fmt_currency_short(rev_current),
-        delta=fmt_delta(rev_change),
-        delta_color=delta_color(rev_change),
-    )
-with kpi2:
-    st.metric(
-        label="Monthly Growth (Avg MoM)",
-        value=fmt_delta(avg_mom),
-    )
-with kpi3:
-    st.metric(
-        label="Average Order Value",
-        value=f"${aov_current:,.2f}",
-        delta=fmt_delta(aov_change),
-        delta_color=delta_color(aov_change),
-    )
-with kpi4:
-    st.metric(
-        label="Total Orders",
-        value=f"{orders_current:,}",
-        delta=fmt_delta(orders_change),
-        delta_color=delta_color(orders_change),
-    )
+if has_comparison:
+    review_summary_prev = bm.review_delivery_summary(delivered_previous, reviews)
+    avg_delivery_prev = bm.average_delivery_days(review_summary_prev) if len(review_summary_prev) > 0 else 0.0
+    delivery_change = (avg_delivery - avg_delivery_prev) / avg_delivery_prev if avg_delivery_prev else float("nan")
+else:
+    delivery_change = float("nan")
+
+
+# ── Helper: build a delta line ──────────────────────────────────────────────
+
+def _delta_html(value, invert=False):
+    """Return an HTML snippet for a % delta indicator.
+
+    *invert*: when True, a negative change is shown green (good) — useful
+    for metrics where lower is better (e.g. delivery time).
+    """
+    if math.isnan(value):
+        return '<div class="card-subtitle">No comparison data</div>'
+    pct = value * 100
+    if invert:
+        is_good = pct <= 0
+    else:
+        is_good = pct >= 0
+    cls = "card-delta-positive" if is_good else "card-delta-negative"
+    arrow = "&#9650;" if pct >= 0 else "&#9660;"
+    return f'<div class="{cls}">{arrow} {abs(pct):.2f}% vs prev</div>'
+
+
+# ── KPI Row (all 6, equal height) ───────────────────────────────────────────
+# Each card has exactly 4 content lines:  label · value · line3 · line4
+# Cards with fewer meaningful lines use a spacer div for the empty ones.
+
+SPACER = '<div class="card-spacer">&nbsp;</div>'
+
+kpi_cards = [
+    # 1) Total Revenue — 3 lines + 1 spacer
+    f"""<div class="kpi-card">
+        <div class="card-label">Total Revenue</div>
+        <div class="card-value">{fmt_currency_short(rev_current)}</div>
+        {_delta_html(rev_change)}
+        {SPACER}
+    </div>""",
+
+    # 2) Monthly Growth — 2 lines + 2 spacers
+    f"""<div class="kpi-card">
+        <div class="card-label">Monthly Growth (Avg MoM)</div>
+        <div class="card-value">{fmt_delta(avg_mom)}</div>
+        {SPACER}
+        {SPACER}
+    </div>""",
+
+    # 3) Average Order Value — 3 lines + 1 spacer
+    f"""<div class="kpi-card">
+        <div class="card-label">Average Order Value</div>
+        <div class="card-value">${aov_current:,.2f}</div>
+        {_delta_html(aov_change)}
+        {SPACER}
+    </div>""",
+
+    # 4) Total Orders — 3 lines + 1 spacer
+    f"""<div class="kpi-card">
+        <div class="card-label">Total Orders</div>
+        <div class="card-value">{orders_current:,}</div>
+        {_delta_html(orders_change)}
+        {SPACER}
+    </div>""",
+
+    # 5) Avg Delivery Time — 3 lines + 1 spacer
+    f"""<div class="kpi-card">
+        <div class="card-label">Avg Delivery Time</div>
+        <div class="card-value">{avg_delivery:.1f} days</div>
+        {_delta_html(delivery_change, invert=True)}
+        {SPACER}
+    </div>""",
+
+    # 6) Avg Review Score — 4 lines (no spacer needed)
+    f"""<div class="kpi-card">
+        <div class="card-label">Avg Review Score</div>
+        <div class="card-value">{avg_review:.2f} / 5.00</div>
+        <div class="stars">{render_stars(avg_review)}</div>
+        <div class="card-subtitle">Based on {len(review_summary):,} reviews</div>
+    </div>""",
+]
+
+kpi_cols = st.columns(6)
+for col, html in zip(kpi_cols, kpi_cards):
+    with col:
+        st.markdown(html, unsafe_allow_html=True)
 
 st.markdown("")
 
@@ -377,7 +424,6 @@ with chart_bot_left:
 
 # -- Satisfaction vs Delivery Time bar chart ------------------------------------
 with chart_bot_right:
-    review_summary = bm.review_delivery_summary(delivered_current, reviews)
     by_bucket = bm.avg_review_by_delivery_bucket(review_summary)
 
     # Ensure correct bucket ordering
@@ -408,51 +454,3 @@ with chart_bot_right:
     )
     st.plotly_chart(fig_sat, use_container_width=True)
 
-# ── Bottom Row ───────────────────────────────────────────────────────────────
-
-avg_delivery = bm.average_delivery_days(review_summary) if len(review_summary) > 0 else 0.0
-avg_review = bm.average_review_score(review_summary) if len(review_summary) > 0 else 0.0
-
-# Comparison-period delivery/review metrics
-if has_comparison:
-    review_summary_prev = bm.review_delivery_summary(delivered_previous, reviews)
-    avg_delivery_prev = bm.average_delivery_days(review_summary_prev) if len(review_summary_prev) > 0 else 0.0
-    delivery_change = (avg_delivery - avg_delivery_prev) / avg_delivery_prev if avg_delivery_prev else float("nan")
-else:
-    delivery_change = float("nan")
-
-bot_left, bot_right = st.columns(2)
-
-with bot_left:
-    # For delivery time, lower is better, so invert the arrow logic
-    if not math.isnan(delivery_change):
-        pct = delivery_change * 100
-        # Negative change = faster delivery = good (green)
-        if pct <= 0:
-            delta_cls = "card-delta-positive"
-            arrow = "&#9660;"  # down arrow (good for delivery time)
-        else:
-            delta_cls = "card-delta-negative"
-            arrow = "&#9650;"  # up arrow (bad for delivery time)
-        delta_html = f'<div class="{delta_cls}">{arrow} {abs(pct):.2f}% vs previous period</div>'
-    else:
-        delta_html = '<div class="card-subtitle">No comparison data</div>'
-
-    st.markdown(f"""
-    <div class="bottom-card">
-        <div class="card-label">Average Delivery Time</div>
-        <div class="card-value">{avg_delivery:.1f} days</div>
-        {delta_html}
-    </div>
-    """, unsafe_allow_html=True)
-
-with bot_right:
-    stars_html = render_stars(avg_review)
-    st.markdown(f"""
-    <div class="bottom-card">
-        <div class="card-label">Average Review Score</div>
-        <div class="card-value">{avg_review:.2f} / 5.00</div>
-        <div class="stars">{stars_html}</div>
-        <div class="card-subtitle">Based on {len(review_summary):,} reviews</div>
-    </div>
-    """, unsafe_allow_html=True)
