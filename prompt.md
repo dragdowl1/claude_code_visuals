@@ -52,4 +52,4 @@ The notebook shows the computation of metrics for a specific date range (entire 
 - Maintainable structure that other analysts can easily understand and extend
 - Maintain all existing analyses while improving the quality, structure, and usability of the notebook.
 - Do not assume any business thresholds.
-<img width="484" height="683" alt="image" src="https://github.com/user-attachments/assets/d4a1b9b5-8243-41a3-a623-f7ed98387b1e" />
+
