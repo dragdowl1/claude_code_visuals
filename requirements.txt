@@ -1,0 +1,4 @@
+pandas>=1.5
+matplotlib>=3.6
+plotly>=5.0
+jupyter>=1.0
